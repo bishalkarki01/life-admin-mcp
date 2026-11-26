@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/bishalkarki01/life-admin-mcp/discussions
+    about: Ask a question or share how you use it
+  - name: Security issue
+    url: https://github.com/bishalkarki01/life-admin-mcp/security/advisories/new
+    about: Please report vulnerabilities privately

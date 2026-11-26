@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest an idea
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like your assistant to be able to do?
+      description: Describe the real-life situation, e.g. "I want to know which of my warranties cover accidental damage."
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: Any ideas on how it could work?
