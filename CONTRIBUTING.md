@@ -2,6 +2,10 @@
 
 Thanks for helping! Bug reports, ideas and pull requests are all welcome.
 
+By submitting a contribution, you agree that it is licensed under the project's [MIT License](LICENSE) and that you have the right to submit it.
+
+**Issues are public.** Never post real bank or card data, account or card numbers, names, addresses or document numbers. For a CSV problem, share only the header row and one made-up line.
+
 ## Quick start
 
 ```bash
