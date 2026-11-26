@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sqlite3
 from collections.abc import Callable, Iterator
@@ -96,7 +97,11 @@ def _amount(value: float) -> int:
 
 
 def _currency(value: str) -> str:
-    value = (value or "").strip().upper()
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        raise ValueError(f"currency must be a 3-letter ISO 4217 code like USD, EUR or INR (got {value!r})")
+    value = value.strip().upper()
     if not _CURRENCY.match(value):
         raise ValueError(f"currency must be a 3-letter ISO 4217 code like USD, EUR or INR (got {value!r})")
     return value
@@ -110,17 +115,61 @@ def _int_range(value: int, field: str, lo: int, hi: int) -> int:
     return value
 
 
+def _words(name: str) -> list[str]:
+    return re.findall(r"[a-z0-9&+']+", name.lower())
+
+
+def _match_tracked(r: Recurring, tracked: list[Item]) -> Item | None:
+    """Find the tracked item a detected charge belongs to, or None if it is unclear.
+
+    An exact name wins. Otherwise one name must contain the other as whole words; if several
+    items match that way (Apple Music and Apple iCloud), prefer the one with the same amount,
+    and give up rather than guess.
+    """
+    key = _words(r.merchant)
+    if not key:
+        return None
+    exact = [i for i in tracked if _words(i.name) == key]
+    if len(exact) == 1:
+        return exact[0]
+
+    def contains(a: list[str], b: list[str]) -> bool:
+        return any(a[k : k + len(b)] == b for k in range(len(a) - len(b) + 1))
+
+    cands = exact or [i for i in tracked if (w := _words(i.name)) and (contains(w, key) or contains(key, w))]
+    if not cands:  # "Spotify Stockholm" on the statement vs "Spotify Premium" tracked
+        cands = [i for i in tracked if (w := _words(i.name)) and w[0] == key[0]]
+    if len(cands) == 1:
+        return cands[0]
+    same = [i for i in cands if i.currency == r.currency and abs(i.amount - r.amount) <= 0.009]
+    return same[0] if len(same) == 1 else None
+
+
 # --------------------------------------------------------------------------- store
 class Store:
     def __init__(self, path: Path | str, today: Callable[[], date] = date.today) -> None:
         self.path = Path(path).expanduser()
         self._today = today
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            self.path.parent.chmod(0o700)
-        except OSError:  # e.g. shared or read-only parent; not fatal
-            pass
+        parent = self.path.parent
+        created = not parent.exists()
+        parent.mkdir(parents=True, exist_ok=True)
+        if created or parent == Path.home() / ".life-admin":
+            # Only tighten a folder we own: never change permissions on a directory the user chose.
+            try:
+                parent.chmod(0o700)
+            except OSError:  # e.g. shared or read-only parent; not fatal
+                pass
+        if not self.path.exists():
+            try:
+                os.close(os.open(self.path, os.O_CREAT | os.O_WRONLY, 0o600))
+            except OSError:
+                pass
         self._migrate()
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                Path(f"{self.path}{suffix}").chmod(0o600)
+            except OSError:  # missing or not ours; not fatal
+                pass
 
     # ---- connection handling
     @contextmanager
@@ -547,15 +596,7 @@ class Store:
             if r.ended:
                 ended.append(r)
                 continue
-            key = r.merchant.lower()
-            match = next(
-                (
-                    i
-                    for i in tracked
-                    if i.name.lower() in key or key in i.name.lower() or key.split()[0] == i.name.lower().split()[0]
-                ),
-                None,
-            )
+            match = _match_tracked(r, tracked)
             if match is None:
                 new.append(r)
             elif match.currency == r.currency and abs(match.amount - r.amount) > 0.009:

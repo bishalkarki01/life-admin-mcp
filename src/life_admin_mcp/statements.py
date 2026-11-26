@@ -12,11 +12,12 @@ Everything runs locally and nothing from the statement is stored. The detector:
 
 from __future__ import annotations
 
+import calendar
 import csv
 import io
 import re
 import statistics
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -31,6 +32,8 @@ AMOUNT_COLS = ("amount", "transaction amount", "value")
 DEBIT_COLS = ("debit", "withdrawal", "withdrawals", "money out", "paid out", "debit amount")
 CREDIT_COLS = ("credit", "deposit", "deposits", "money in", "paid in", "credit amount")
 CURRENCY_COLS = ("currency", "ccy")
+# A header containing one of these is never the single amount column ("Value Date", "Debit Amount", "Balance").
+_NOT_AMOUNT = ("date", "balance") + DEBIT_COLS + CREDIT_COLS
 
 # Cycle name -> (typical days, min days, max days)
 CADENCES = {
@@ -40,11 +43,13 @@ CADENCES = {
     "yearly": (365, 350, 380),
 }
 
+# Word prefixes only count when followed by a separator, so "MCDONALDS" and "POSTMATES" survive.
 _NOISE = re.compile(
-    r"^(POS|DEBIT|CREDIT|CARD|PURCHASE|RECURRING|PAYMENT|ACH|DD|DIRECT DEBIT|VISA|MC|CHECKCARD|PREAUTHORIZED|"
-    r"ONLINE|WEB|AUTOPAY|BILL PAY|SQ \*|SQ\*|TST\*|TST \*|PAYPAL \*|PP\*|GOOGLE \*)\s*",
+    r"^(?:(?:POS|DEBIT|CREDIT|CARD|PURCHASE|RECURRING|PAYMENT|ACH|DD|DIRECT DEBIT|VISA|MC|CHECKCARD|PREAUTHORIZED|"
+    r"ONLINE|WEB|AUTOPAY|BILL PAY)(?:\s*[-:#/]\s*|\s+)|(?:SQ|TST|PAYPAL|PP|GOOGLE) ?\*\s*)",
     re.I,
 )
+_MINUS = str.maketrans({"\u2212": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-"})
 _TAIL = re.compile(
     r"(\s+[A-Z]{2}\s*$)|(\s+\d[\d\-\s#*/.]*.*$)|(\s+(REF|ID|TXN|AUTH|CARD)\b.*$)|(\*[\w\d]+.*$)|(\s+X{2,}\d*.*$)",
     re.I,
@@ -141,7 +146,9 @@ def _parse_amount(text: str) -> int | None:
     t = (text or "").strip()
     if not t:
         return None
-    neg = t.startswith("-") or t.endswith("-") or (t.startswith("(") and t.endswith(")"))
+    t = t.translate(_MINUS)
+    # The sign can sit anywhere: "-12.00", "12.00-", "$-12.00", "USD -12.00", "(12.00)".
+    neg = "-" in t or (t.startswith("(") and t.endswith(")"))
     t = re.sub(r"[^\d.,]", "", t)
     if not t:
         return None
@@ -197,16 +204,20 @@ def _choose_date_format(samples: list[str], requested: str) -> tuple[str, bool]:
     return best, best in ("us", "eu") and scores["us"] == scores["eu"]
 
 
-def _find(headers: list[str], names: tuple[str, ...]) -> int | None:
+def _find(headers: list[str], names: tuple[str, ...], exclude: tuple[str, ...] = ()) -> int | None:
     lowered = [h.strip().lower() for h in headers]
     for n in names:
         if n in lowered:
             return lowered.index(n)
     for n in names:  # looser: header contains the word
         for i, h in enumerate(lowered):
-            if n in h:
+            if n in h and not any(x in h for x in exclude):
                 return i
     return None
+
+
+def _find_amount(headers: list[str]) -> int | None:
+    return _find(headers, AMOUNT_COLS, exclude=_NOT_AMOUNT)
 
 
 # --------------------------------------------------------------------------- parse
@@ -232,7 +243,7 @@ def parse_statement(text: str, date_format: str = "auto", default_currency: str 
             if (
                 len(row) >= 2
                 and _find(row, DATE_COLS) is not None
-                and (_find(row, AMOUNT_COLS) is not None or _find(row, DEBIT_COLS) is not None)
+                and (_find_amount(row) is not None or _find(row, DEBIT_COLS) is not None)
             ):
                 header_idx = i
                 break
@@ -248,7 +259,7 @@ def parse_statement(text: str, date_format: str = "auto", default_currency: str 
         raise ValueError(f"Statement has more than {MAX_ROWS:,} rows; export a shorter date range.")
     c_date = _find(headers, DATE_COLS)
     c_desc = _find(headers, DESC_COLS)
-    c_amt = _find(headers, AMOUNT_COLS)
+    c_amt = _find_amount(headers)
     c_debit = _find(headers, DEBIT_COLS)
     c_credit = _find(headers, CREDIT_COLS)
     c_cur = _find(headers, CURRENCY_COLS)
@@ -256,7 +267,10 @@ def parse_statement(text: str, date_format: str = "auto", default_currency: str 
         raise ValueError("Couldn't find a description/merchant/payee column.")
     assert c_date is not None  # noqa: S101 - guaranteed by header detection above
 
-    fmt, ambiguous = _choose_date_format([r[c_date] for r in data[:200] if len(r) > c_date], date_format)
+    samples = [r[c_date] for r in data[:200] if len(r) > c_date and r[c_date].strip()]
+    if not samples:
+        raise ValueError("The statement has a header row but no transactions. Export a date range with charges.")
+    fmt, ambiguous = _choose_date_format(samples, date_format)
     raw_rows: list[tuple[date, str, int, str]] = []
     skipped = 0
     for r in data:
@@ -315,6 +329,34 @@ def _cadence(intervals: list[int]) -> tuple[str, float] | None:
     return None
 
 
+def _split_by_amount(items: list[Txn]) -> list[list[Txn]]:
+    """Split one merchant's charges into series of similar amounts (iCloud and Apple Music both bill as Apple)."""
+    series: list[list[Txn]] = []
+    for t in items:
+        for sr in series:
+            first, last = sr[0], sr[-1]
+            if last.day != t.day and abs(t.amount_cents - first.amount_cents) <= max(first.amount_cents, 1) * 0.01:
+                sr.append(t)
+                break
+        else:
+            series.append([t])
+    # Re-join a series that stops just as another starts on the same cadence: that is one
+    # subscription whose price changed (iCloud going from 2.99 to 3.99), not two.
+    series.sort(key=lambda sr: sr[0].day)
+    merged: list[list[Txn]] = []
+    for sr in series:
+        for m in merged:
+            gap = (sr[0].day - m[-1].day).days
+            own = _cadence([(b.day - a.day).days for a, b in zip(m, m[1:], strict=False)])
+            follow = _cadence([gap])
+            if gap > 0 and own and follow and own[0] == follow[0] and len(m) >= 2:
+                m.extend(sr)
+                break
+        else:
+            merged.append(sr)
+    return merged
+
+
 def detect_recurring(txns: list[Txn], today: date, statement_end: date | None = None) -> list[Recurring]:
     statement_end = statement_end or max((t.day for t in txns), default=today)
     groups: dict[tuple[str, str], list[Txn]] = defaultdict(list)
@@ -329,71 +371,88 @@ def detect_recurring(txns: list[Txn], today: date, statement_end: date | None = 
             if uniq and uniq[-1].day == t.day and uniq[-1].amount_cents == t.amount_cents:
                 continue
             uniq.append(t)
-        if len(uniq) < 2:
+        # Different amounts on the same day mean several subscriptions from one merchant.
+        if not any(a.day == b.day for a, b in zip(uniq, uniq[1:], strict=False)):
+            r = _analyse(uniq, currency, today, statement_end)
+            if r is not None:
+                found.append(r)
             continue
-        intervals = [(b.day - a.day).days for a, b in zip(uniq, uniq[1:], strict=False)]
-        if any(i == 0 for i in intervals):
-            continue
-        cad = _cadence(intervals)
-        if not cad:
-            continue
-        cycle, regularity = cad
-        need = 3 if cycle == "weekly" else 2
-        if len(uniq) < need or regularity < 0.6:
-            continue
-        amounts = [t.amount_cents for t in uniq]
-        latest = amounts[-1]
-        # Variable bills (utilities) still recur; very erratic amounts are probably ordinary shopping.
-        spread = max(amounts) / max(min(amounts), 1)
-        if spread > 3:
-            continue
-        price_change = None
-        price_changed_on = None
-        variable = None
-        # Split the amounts into runs of (nearly) equal prices. A subscription whose price rose
-        # looks like a few long runs; a utility bill changes every time.
-        runs: list[list[int]] = []  # [amount, length, start index]
-        for idx, a in enumerate(amounts):
-            if runs and abs(a - runs[-1][0]) <= max(runs[-1][0], 1) * 0.01:
-                runs[-1][1] += 1
-            else:
-                runs.append([a, 1, idx])
-        stepwise = len(runs) <= 3 and all(r[1] >= 2 for r in runs[:-1])
-        if not stepwise:
-            variable = (min(amounts) / 100, max(amounts) / 100)
-            latest = round(statistics.median(amounts[-3:]))
-        elif len(runs) > 1:
-            price_change = (runs[-2][0] / 100, runs[-1][0] / 100)
-            price_changed_on = uniq[runs[-1][2]].day.isoformat()
-        typical_days = CADENCES[cycle][0]
-        ended = (statement_end - uniq[-1].day).days > typical_days * 1.5 + 5
-        confidence = "high" if len(uniq) >= 3 and regularity >= 0.8 and variable is None else "medium"
-        nxt = uniq[-1].day
-        anchor = nxt.day
-        for _ in range(60):
-            nxt = advance(nxt, cycle, anchor)
-            if nxt >= today:
-                break
-        found.append(
-            Recurring(
-                merchant=uniq[-1].merchant,
-                cycle=cycle,
-                amount=latest / 100,
-                currency=currency,
-                occurrences=len(uniq),
-                first_seen=uniq[0].day.isoformat(),
-                last_seen=uniq[-1].day.isoformat(),
-                next_expected=nxt.isoformat(),
-                confidence=confidence,
-                price_change=price_change,
-                price_changed_on=price_changed_on,
-                variable=variable,
-                ended=ended,
-                examples=list(dict.fromkeys(t.raw for t in uniq))[:2],
-            )
-        )
+        # Each series must be a steady price, and together they must explain most of the merchant's
+        # charges; otherwise this is ordinary shopping that sometimes happens twice a day.
+        parts = [_analyse(sr, currency, today, statement_end) for sr in _split_by_amount(uniq)]
+        steady = [r for r in parts if r is not None and r.variable is None and r.confidence == "high"]
+        if sum(r.occurrences for r in steady) >= 0.8 * len(uniq):
+            found.extend(steady)
     found.sort(key=lambda r: r.annual_cost, reverse=True)
     return found
+
+
+def _analyse(uniq: list[Txn], currency: str, today: date, statement_end: date) -> Recurring | None:
+    if len(uniq) < 2:
+        return None
+    intervals = [(b.day - a.day).days for a, b in zip(uniq, uniq[1:], strict=False)]
+    if any(i == 0 for i in intervals):
+        return None
+    cad = _cadence(intervals)
+    if not cad:
+        return None
+    cycle, regularity = cad
+    need = 3 if cycle == "weekly" else 2
+    if len(uniq) < need or regularity < 0.6:
+        return None
+    amounts = [t.amount_cents for t in uniq]
+    latest = amounts[-1]
+    # Variable bills (utilities) still recur; very erratic amounts are probably ordinary shopping.
+    spread = max(amounts) / max(min(amounts), 1)
+    if spread > 3:
+        return None
+    price_change = None
+    price_changed_on = None
+    variable = None
+    # Split the amounts into runs of (nearly) equal prices. A subscription whose price rose
+    # looks like a few long runs; a utility bill changes every time.
+    runs: list[list[int]] = []  # [amount, length, start index]
+    for idx, a in enumerate(amounts):
+        if runs and abs(a - runs[-1][0]) <= max(runs[-1][0], 1) * 0.01:
+            runs[-1][1] += 1
+        else:
+            runs.append([a, 1, idx])
+    stepwise = len(runs) <= 3 and all(r[1] >= 2 for r in runs[:-1])
+    if not stepwise:
+        variable = (min(amounts) / 100, max(amounts) / 100)
+        latest = round(statistics.median(amounts[-3:]))
+    elif len(runs) > 1:
+        price_change = (runs[-2][0] / 100, runs[-1][0] / 100)
+        price_changed_on = uniq[runs[-1][2]].day.isoformat()
+    typical_days = CADENCES[cycle][0]
+    ended = (statement_end - uniq[-1].day).days > typical_days * 1.5 + 5
+    confidence = "high" if len(uniq) >= 3 and regularity >= 0.8 and variable is None else "medium"
+    nxt = uniq[-1].day
+    anchor = nxt.day
+    usual = Counter(t.day.day for t in uniq).most_common(1)[0][0]
+    if cycle != "weekly" and calendar.monthrange(nxt.year, nxt.month)[1] < usual:
+        # A charge on Feb 28 that is usually on the 31st was clamped to February; keep the 31st.
+        anchor = usual
+    for _ in range(60):
+        nxt = advance(nxt, cycle, anchor)
+        if nxt >= today:
+            break
+    return Recurring(
+        merchant=uniq[-1].merchant,
+        cycle=cycle,
+        amount=latest / 100,
+        currency=currency,
+        occurrences=len(uniq),
+        first_seen=uniq[0].day.isoformat(),
+        last_seen=uniq[-1].day.isoformat(),
+        next_expected=nxt.isoformat(),
+        confidence=confidence,
+        price_change=price_change,
+        price_changed_on=price_changed_on,
+        variable=variable,
+        ended=ended,
+        examples=list(dict.fromkeys(t.raw for t in uniq))[:2],
+    )
 
 
 def scan(text: str, today: date, date_format: str = "auto", default_currency: str = "USD") -> ScanResult:

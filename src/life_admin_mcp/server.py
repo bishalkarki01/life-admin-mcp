@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import functools
-import ipaddress
 import logging
 import os
 import sys
@@ -228,7 +227,8 @@ def spending_summary() -> str:
     if s["increases"]:
         lines.append("\nPrice increases since you started tracking:")
         for i, first, now in s["increases"]:
-            lines.append(f"  #{i.id} {i.name}: {first:.2f} → {now:.2f} {i.currency} (+{(now - first) / first:.0%})")
+            pct = f" (+{(now - first) / first:.0%})" if first > 0 else ""
+            lines.append(f"  #{i.id} {i.name}: {first:.2f} → {now:.2f} {i.currency}{pct}")
     if s["trials"]:
         lines.append("\nFree trials (not in the totals yet) that will start charging:")
         for i in s["trials"]:
@@ -551,18 +551,26 @@ def main(argv: list[str] | None = None) -> None:
     if settings is not None and hasattr(settings, "port"):  # SDK v1 configures host/port via settings
         setattr(settings, "host", args.host)  # noqa: B010
         setattr(settings, "port", args.port)  # noqa: B010
+        if not _is_loopback(args.host) and hasattr(settings, "transport_security"):
+            # v1 locked the Host allow-list to loopback when the server was built; behind a proxy
+            # (--allow-remote) the proxy's Host header must be accepted.
+            from mcp.server.transport_security import TransportSecuritySettings
+
+            setattr(  # noqa: B010
+                settings, "transport_security", TransportSecuritySettings(enable_dns_rebinding_protection=False)
+            )
         mcp.run("streamable-http")
     else:  # SDK v2 takes them as run() options
         mcp.run("streamable-http", host=args.host, port=args.port)
 
 
 def _is_loopback(host: str) -> bool:
-    if host == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
+    # Only the addresses the MCP SDK protects against DNS rebinding. Other loopback IPs such as
+    # 127.0.0.2 would run without that protection, so they need --allow-remote like any other host.
+    return host in _LOOPBACK
+
+
+_LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
 
 if __name__ == "__main__":
