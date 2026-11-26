@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 — 2026-11-25
+
+### Fixed
+- Calendar export labelled every later charge of a free trial as "free trial ends". The trial's end date now appears once, and the charges that follow read "due … (if the trial wasn't cancelled)". Found by a real end-to-end session with Claude Code.
+
+### Added
+- `docs/real-session.mp4` and `.gif`: a real, unedited Claude Code session using the published package on the made-up sample statement, rendered by `demo/render_session.py`.
+
 ## 1.0.0 — 2026-11-25
 
 First stable release.
