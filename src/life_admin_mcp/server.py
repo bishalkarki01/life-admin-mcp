@@ -37,7 +37,10 @@ INSTRUCTIONS = (
     "Use get_upcoming for 'what's due', find_savings for 'what can I cancel', spending_summary for totals, "
     "forecast for future months. If the user has a bank or card statement, use scan_statement to find "
     "recurring charges, show them the results, and only add the items they confirm. "
-    "Confirm with the user before delete_item. Never invent amounts or dates: ask if unknown."
+    "Confirm with the user before delete_item. Never invent amounts or dates: ask if unknown. "
+    "Savings and recurring-charge results are estimates from the user's own data, not financial advice: "
+    "say so briefly, and suggest checking terms, notice periods and fees with the provider before cancelling. "
+    "This server cannot cancel anything with a provider; cancel_item only stops tracking."
 )
 
 mcp = _Server("life-admin", instructions=INSTRUCTIONS)
@@ -156,7 +159,8 @@ def add_item(
         cycle: weekly | monthly | quarterly | yearly | once. Warranties and documents are usually "once".
         category: Optional group such as "streaming", "insurance", "utilities". Used to spot overlaps.
         remind_days: How many days ahead it should appear in get_upcoming (passports: about 180).
-        notes: Anything useful, such as an account number hint or how to cancel.
+        notes: Anything useful, such as how to cancel or which login email it uses.
+            Never store full card or account numbers.
     """
     item = get_store().add(
         name=name,
@@ -259,6 +263,7 @@ def find_savings(unused_days: int = 30) -> str:
                 for i in s["stale"]
             )
             + f"\n  Potential saving: {_money(s['potential_yearly'])} per year"
+            + "\n  (Estimate only. Check terms and fees with each provider before cancelling.)"
         )
     if s["overlaps"]:
         out.append(
@@ -267,7 +272,9 @@ def find_savings(unused_days: int = 30) -> str:
                 f"  {cat}: " + ", ".join(f"{i.name} (#{i.id})" for i in items) for cat, items in s["overlaps"].items()
             )
         )
-    return "\n\n".join(out) or "No obvious savings: every subscription looks used and unique."
+    return (
+        "\n\n".join(out) or "No obvious savings: every tracked subscription has recent recorded use and none overlap."
+    )
 
 
 @tool(IDEMPOTENT)
@@ -309,9 +316,13 @@ def update_item(
 
 @tool(IDEMPOTENT)
 def cancel_item(item_id: int) -> str:
-    """Mark an item as cancelled. It stays in history (list_items include_inactive=true)
-    and stops appearing in reminders and totals. Use reactivate_item to undo."""
-    return "Cancelled:\n" + fmt(get_store().set_active(item_id, False))
+    """Stop tracking an item the user has cancelled (or will cancel) with the provider.
+    This does NOT contact the provider or cancel anything there. The item stays in history
+    (list_items include_inactive=true) and stops appearing in reminders and totals.
+    Use reactivate_item to undo."""
+    return "Stopped tracking (this does not cancel it with the provider; cancel there too):\n" + fmt(
+        get_store().set_active(item_id, False)
+    )
 
 
 @tool(IDEMPOTENT)
@@ -479,7 +490,7 @@ def upcoming_resource() -> str:
 
 @mcp.prompt()
 def import_statement() -> str:
-    """Find every subscription in a bank or card statement and start tracking them."""
+    """Find the recurring charges in a bank or card statement and start tracking the ones the user confirms."""
     return (
         "Help me find all my subscriptions and recurring bills. Ask me to export my last 3-12 months "
         "of transactions as a CSV from my bank or card app and give you the file path, or paste it. "

@@ -62,13 +62,18 @@ jobs:
           [ "$TAG" = "$PKG" ] && [ "$SRV" = "$TAG $TAG" ]
 
       - run: pip install build && python -m build
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           skip-existing: true   # lets a re-run continue to the registry and release steps
 
       - name: Install mcp-publisher
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          # Pinned version, checked against the SHA-256 published in that release's checksums file.
+          V=v1.8.16
+          SHA=6e2f799550cf843c6fd3350498d56cc49be3dc0af1e6237eb0e6435c7a9d5c05
+          curl -fsSL -o mcp-publisher.tgz "https://github.com/modelcontextprotocol/registry/releases/download/$V/mcp-publisher_linux_amd64.tar.gz"
+          echo "$SHA  mcp-publisher.tgz" | sha256sum -c -
+          tar xzf mcp-publisher.tgz mcp-publisher
       - name: Publish to the MCP Registry
         run: |
           ./mcp-publisher login github-oidc

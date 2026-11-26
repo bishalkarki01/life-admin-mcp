@@ -2,7 +2,7 @@
 
 ## 1.0.0 — 2026-11-25
 
-First production release.
+First stable release.
 
 ### Added
 - **Statement scanning (`scan_statement`).** Finds recurring charges in a bank or card CSV:
@@ -21,7 +21,7 @@ First production release.
 - Tool annotations that tell clients which tools only read, which change data, and which delete.
 - A `weekly_review` prompt and a `life-admin://upcoming` resource.
 - Works with MCP Python SDK v1 and v2.
-- 72 tests, including end-to-end stdio and HTTP-safety tests. CI runs them on Linux, macOS and Windows, Python 3.10 and 3.13, and both SDK versions.
+- 103 tests, including end-to-end stdio and HTTP-safety tests. CI runs them on Linux, macOS and Windows, Python 3.10 and 3.13, and both SDK versions.
 - Pushing a version tag publishes to PyPI, the official MCP Registry (`io.github.bishalkarki01/life-admin-mcp`) and GitHub Releases.
 
 ### Fixed (found while testing on a realistic session)

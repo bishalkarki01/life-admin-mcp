@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "life-admin-mcp"
 dynamic = ["version"]
-description = "MCP server that finds every subscription in your bank statement, tracks trials, bills and expiring documents, and tells you what to cancel. Local and private."
+description = "MCP server that finds recurring subscriptions in your bank statement CSV, tracks trials, bills and expiring documents, and suggests what to cancel. Local storage, no network calls."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

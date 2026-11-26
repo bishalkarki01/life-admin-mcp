@@ -2,6 +2,16 @@ name: Bug report
 description: Something doesn't work as expected
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: "**This issue is public.** Never paste real bank or card data, account or card numbers, names, addresses or document numbers. For a CSV problem, share only the header row and one made-up line."
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed all real financial and personal data from this report
+          required: true
   - type: textarea
     id: what
     attributes:

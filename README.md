@@ -2,23 +2,23 @@
 
 # Life Admin MCP
 
-**Give your AI assistant a bank statement. It finds every subscription you're paying for, warns you before free trials charge, and tells you what to cancel.**
+**Give your AI assistant a bank statement. It finds the recurring charges you're paying for, warns you before free trials charge, and suggests what you could cancel.**
 
 [![PyPI](https://img.shields.io/pypi/v/life-admin-mcp)](https://pypi.org/project/life-admin-mcp/)
 [![CI](https://github.com/bishalkarki01/life-admin-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/bishalkarki01/life-admin-mcp/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Local only](https://img.shields.io/badge/data-stays%20on%20your%20machine-0b5d63)
+![Local storage](https://img.shields.io/badge/storage-local%20SQLite%2C%20no%20network%20calls-0b5d63)
 
 <img src="https://raw.githubusercontent.com/bishalkarki01/life-admin-mcp/main/docs/demo.gif" alt="Demo: scanning a year of bank transactions finds 12 recurring charges worth $3,406 a year, then asking what to cancel finds $1,067 a year" width="800">
 
-<sub>Real output from a test session. [Watch the full 90-second demo](https://github.com/bishalkarki01/life-admin-mcp/raw/main/docs/demo.mp4).</sub>
+<sub>Real tool output from a demo with a made-up user and made-up data. Your results will differ. [Watch the full 90-second demo](https://github.com/bishalkarki01/life-admin-mcp/raw/main/docs/demo.mp4).</sub>
 
 </div>
 
 ---
 
-People guess they spend about **$86 a month** on subscriptions. When they add it up, the real figure is closer to **$219**, and 42% are paying for something they stopped using ([C+R Research survey, via CNBC](https://www.nbcwashington.com/news/business/money-report/consumers-spend-an-average-133-more-each-month-on-subscriptions-than-they-realize-study-shows/3067565/)).
+In a 2022 survey, people guessed they spend about **$86 a month** on subscriptions; asked category by category, the figure was closer to **$219**, and 42% said they'd forgotten a subscription they were still paying for ([C+R Research survey, reported via NBC](https://www.nbcwashington.com/news/business/money-report/consumers-spend-an-average-133-more-each-month-on-subscriptions-than-they-realize-study-shows/3067565/)).
 
 Life Admin MCP gives Claude, Cursor or any other MCP assistant a memory for this. You just talk to it:
 
@@ -29,14 +29,14 @@ Life Admin MCP gives Claude, Cursor or any other MCP assistant a memory for this
 > **Assistant:** $2,254.47 in charges. Rent and the gym on Dec 1, then Netflix, Spotify and your phone. Heads-up: your fridge warranty already expired, and your MacBook's ends Dec 12.
 
 > **You:** What could I cancel?
-> **Assistant:** You haven't used the gym since September, and the yoga app and Hulu never. Cancelling those and Max would save **$1,067.64 a year**. You also pay for three streaming services.
+> **Assistant:** You last used the gym in September, and there's no recorded use of the yoga app or Hulu. Cancelling those and Max would save about **$1,067.64 a year**. You also pay for three streaming services.
 
 ## Why you'll like it
 
 - 🔎 **Finds subscriptions you forgot.** Point it at a CSV from your bank or card app. It works with most banks' formats, removes the noise from merchant names, and finds anything that repeats weekly, monthly, quarterly or yearly. It spots price rises, tells variable bills apart from fixed ones, and flags subscriptions that have already stopped. It never stores the statement.
 - ⏳ **Catches free trials.** It warns you before a trial becomes a paid subscription.
 
-- 🔒 **Private.** Everything is stored in one SQLite file on your computer. It needs no account or API key, makes no network calls and has no telemetry.
+- 🔒 **Local storage, no network.** Everything is stored in one SQLite file on your computer. The server needs no account or API key, makes no network calls and has no telemetry. Your AI assistant does see tool results, so see [Privacy](#privacy).
 - ⚡ **30-second setup.** One line in your MCP client's config.
 - 🧠 **Remembers what you forget.**
   - Recurring charges move to their next date automatically.
@@ -45,8 +45,8 @@ Life Admin MCP gives Claude, Cursor or any other MCP assistant a memory for this
 - 💸 **Finds savings.** It spots unused subscriptions, overlaps like three streaming services, and price increases since you started tracking.
 - 📈 **Forecasts your spending.** It shows how much will go out each month for the next 1–36 months.
 - 📅 **Works with your calendar.** It exports a standard `.ics` file with alerts for Google, Apple or Outlook calendars.
-- ✅ **Production quality.**
-  - 72 tests run on Linux, macOS and Windows, on both MCP SDK v1 and v2.
+- ✅ **Well tested.**
+  - 103 tests run on Linux, macOS and Windows, on both MCP SDK v1 and v2.
   - Every input is validated.
   - Schema migrations keep your data safe across upgrades.
 
@@ -101,8 +101,8 @@ docker build -t life-admin-mcp . && docker run -i --rm -v life-admin:/data life-
 |---|---|
 | "Find my subscriptions in ~/Downloads/statement.csv" | Lists recurring charges with yearly costs, price changes and ones that look cancelled, then asks which to track |
 | "I started a Duolingo trial, it ends Dec 10 and then costs $12.99 a month" | Tracked as a trial, with a warning before it starts charging |
-| "Add my rent, $2,100 on the 1st of every month" | Tracked, with a reminder 7 days ahead |
-| "My passport expires 2027-05-02, warn me 6 months before" | Shows up in reminders from November |
+| "Add my rent, $2,100 on the 1st of every month" | Tracked; shows up in "what's due" from 7 days ahead |
+| "My passport expires 2027-05-02, warn me 6 months before" | Shows up in "what's due" from November |
 | "What's due this week?" | Charges and expiries, with expired items flagged first |
 | "How much do I spend on subscriptions?" | Monthly and yearly totals by category and currency |
 | "What could I cancel?" | Unused subscriptions and overlaps, with the yearly saving |
@@ -125,7 +125,7 @@ docker build -t life-admin-mcp . && docker run -i --rm -v life-admin:/data life-
 | `find_savings` | Find unused subscriptions and overlaps | read-only |
 | `mark_used` | Record that you used a subscription | write |
 | `update_item` | Change any field | write |
-| `cancel_item` / `reactivate_item` | Stop or resume tracking (history is kept) | write |
+| `cancel_item` / `reactivate_item` | Stop or resume tracking. This does not cancel anything with the provider; history is kept | write |
 | `delete_item` | Permanently delete an item | **destructive** |
 | `forecast` | Show money going out per month | read-only |
 | `get_item` | Show full details, including price history | read-only |
@@ -147,22 +147,35 @@ HTTP mode only listens on your own machine, because it has no login. To bind it 
 ## FAQ
 
 **Does it connect to my bank?**
-No, and that's on purpose: nothing leaves your machine. Export a CSV from your bank or card app (most have "Download transactions") and ask your assistant to scan it. The statement is analysed in memory and never stored. Only the items you confirm are saved.
+No, and that's on purpose: the server never connects to your bank or the internet. Export a CSV from your bank or card app (most have "Download transactions") and ask your assistant to scan it. The statement is analysed in memory and never stored. Only the items you confirm are saved.
 
 **Which banks work?**
-Most CSV exports work. It detects the date, description and amount (or debit/credit) columns, the delimiter, the date format (US, EU or ISO), and whether spending is shown as positive or negative. It also skips header lines some banks put above the data. If yours doesn't work, [open an issue](https://github.com/bishalkarki01/life-admin-mcp/issues/new/choose) with the header row and one made-up line.
+Most CSV exports work. It detects the date, description and amount (or debit/credit) columns, the delimiter, the date format (US, EU or ISO), and whether spending is shown as positive or negative. It also skips header lines some banks put above the data. If yours doesn't work, [open an issue](https://github.com/bishalkarki01/life-admin-mcp/issues/new/choose) with the header row and one made-up line. Never post real transactions: issues are public.
 
 **Can I try it without my own data?**
 Yes. Download [`sample-statement.csv`](https://raw.githubusercontent.com/bishalkarki01/life-admin-mcp/main/examples/sample-statement.csv), a realistic made-up year of card transactions, then ask your assistant to scan it using the full path where you saved it.
 
 **Will it remind me on its own?**
-Your assistant reminds you when you ask. For phone alerts, say "put it all on my calendar" and import the `.ics` file into your calendar app.
+Your assistant reminds you when you ask. For phone alerts, say "put it all on my calendar" and import the `.ics` file into your calendar app. The file is a snapshot, so export it again after changes. Don't rely on this tool alone for legal, travel or payment deadlines.
 
 **Can I use different currencies?**
 Yes. Totals are kept separately for each currency and never converted.
 
 **Where's my data, and how do I back it up?**
 It's one file at `~/.life-admin/life_admin.db` (on macOS and Linux, only your user account can read it). To back it up, ask "back up my data", or copy that file.
+
+**How do I delete everything?**
+Quit your MCP client and delete the `~/.life-admin/` folder (or the file you set with `--db`, plus any `-wal` and `-shm` files next to it).
+
+## Privacy
+
+The maintainer collects no data. Life Admin MCP has no servers, accounts, analytics or telemetry, and it stores your items in a local SQLite file that you control.
+
+What the tools return (merchant names, amounts, dates, notes) goes into your conversation with your AI assistant. If that assistant uses a cloud model (Claude, ChatGPT, Cursor and so on), its provider processes that text under its own privacy terms. To keep raw statement rows out of the chat, give the assistant a file path instead of pasting the CSV. To keep everything on your machine, use a local model.
+
+## Limitations
+
+Life Admin MCP is a personal organiser, not financial, legal or tax advice. It finds subscriptions by spotting patterns, so it can miss charges, misread amounts or dates, or flag something you still need. "Unused" only means you haven't told it you used something. Reminders appear only when you ask your assistant or import a calendar file. It cannot cancel anything with a provider: check terms, notice periods and fees with the provider before you cancel. It is provided as is, with no warranty (see the [license](https://github.com/bishalkarki01/life-admin-mcp/blob/main/LICENSE)).
 
 ## Roadmap
 
@@ -182,6 +195,10 @@ PRs are welcome. See [CONTRIBUTING.md](https://github.com/bishalkarki01/life-adm
 ```bash
 pip install -e ".[dev]" && pytest
 ```
+
+## Trademarks
+
+Product and company names such as Netflix, Spotify, Hulu, Max, Apple, Adobe, Amazon, YouTube, Claude and Cursor are trademarks of their respective owners. They appear only to describe example transactions and compatible apps. Life Admin MCP is an independent project and is not affiliated with or endorsed by any of them, including Anthropic.
 
 ## License
 
