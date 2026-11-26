@@ -349,3 +349,10 @@ def test_scan_matches_location_suffixed_descriptor(store, clock):
     ]
     res = store.scan_statement("\n".join(rows))
     assert [i.name for _, i in res["known"]] == ["Spotify Premium"] and res["new"] == []
+
+
+def test_calendar_trial_end_appears_once_then_charges(store):
+    store.add(name="Duolingo", kind="trial", due_date="2026-02-10", amount=12.99, cycle="monthly")
+    ics = store.calendar(days=90)
+    assert ics.count("SUMMARY:Duolingo free trial ends") == 1
+    assert "Duolingo due — 12.99 USD (if the trial wasn't cancelled)" in ics.replace("\r\n ", "")

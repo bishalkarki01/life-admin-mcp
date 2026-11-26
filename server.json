@@ -3,7 +3,7 @@
   "name": "io.github.bishalkarki01/life-admin-mcp",
   "title": "Life Admin",
   "description": "Finds recurring subscriptions in a bank statement CSV; tracks trials, bills and expiring documents.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": {
     "url": "https://github.com/bishalkarki01/life-admin-mcp",
     "source": "github"
@@ -12,7 +12,7 @@
     {
       "registryType": "pypi",
       "identifier": "life-admin-mcp",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

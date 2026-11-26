@@ -12,7 +12,7 @@
 
 <img src="https://raw.githubusercontent.com/bishalkarki01/life-admin-mcp/main/docs/demo.gif" alt="Demo: scanning a year of bank transactions finds 12 recurring charges worth $3,406 a year, then asking what to cancel finds $1,067 a year" width="800">
 
-<sub>Real tool output from a demo with a made-up user and made-up data. Your results will differ. [Watch the full 90-second demo](https://github.com/bishalkarki01/life-admin-mcp/raw/main/docs/demo.mp4).</sub>
+<sub>Real tool output from a demo with a made-up user and made-up data. Your results will differ. [Watch the full 90-second demo](https://github.com/bishalkarki01/life-admin-mcp/raw/main/docs/demo.mp4), or [a real, unedited Claude Code session](https://github.com/bishalkarki01/life-admin-mcp/raw/main/docs/real-session.mp4) (1 minute).</sub>
 
 </div>
 

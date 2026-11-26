@@ -499,8 +499,10 @@ class Store:
         events = []
         for it, d in self.occurrences(today, today + timedelta(days=days)):
             money = f" — {it.amount:.2f} {it.currency}" if it.amount else ""
-            if it.kind == "trial":
+            if it.kind == "trial" and d.isoformat() == it.due_date:
                 summary = f"{it.name} free trial ends — then{money}/{it.cycle}" if money else f"{it.name} trial ends"
+            elif it.kind == "trial":  # the charges that follow if the trial isn't cancelled
+                summary = f"{it.name} due{money} (if the trial wasn't cancelled)"
             else:
                 verb = "expires" if it.kind in EXPIRING_KINDS else "due"
                 summary = f"{it.name} {verb}{money}"
