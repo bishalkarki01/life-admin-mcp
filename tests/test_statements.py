@@ -5,7 +5,7 @@ import pytest
 
 from life_admin_mcp.statements import normalise_merchant, parse_statement, scan
 
-SAMPLE = (Path(__file__).parent.parent / "examples" / "sample-statement.csv").read_text()
+SAMPLE = (Path(__file__).parent.parent / "examples" / "sample-statement.csv").read_text(encoding="utf-8")
 TODAY = date(2026, 11, 25)
 
 

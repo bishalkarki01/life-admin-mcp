@@ -9,15 +9,15 @@ ROOT = Path(__file__).parent.parent
 
 
 def test_server_json_matches_package_version():
-    server = json.loads((ROOT / "server.json").read_text())
+    server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
     assert server["version"] == __version__
     assert all(p["version"] == __version__ for p in server["packages"])
 
 
 def test_readme_has_registry_ownership_marker():
-    server = json.loads((ROOT / "server.json").read_text())
-    assert f"mcp-name: {server['name']}" in (ROOT / "README.md").read_text()
+    server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    assert f"mcp-name: {server['name']}" in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
 def test_changelog_mentions_current_version():
-    assert f"## {__version__}" in (ROOT / "CHANGELOG.md").read_text()
+    assert f"## {__version__}" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

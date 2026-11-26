@@ -281,7 +281,7 @@ def test_scan_statement_compares_with_tracked_items(store, clock):
     from pathlib import Path
 
     clock.d = date(2026, 11, 25)
-    sample = (Path(__file__).parent.parent / "examples" / "sample-statement.csv").read_text()
+    sample = (Path(__file__).parent.parent / "examples" / "sample-statement.csv").read_text(encoding="utf-8")
     add_netflix(store, due_date="2026-12-02")  # tracked at the old price
     store.add(name="Spotify", kind="subscription", due_date="2026-12-03", amount=11.99, cycle="monthly")
     res = store.scan_statement(sample)
