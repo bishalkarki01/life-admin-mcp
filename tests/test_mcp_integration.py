@@ -129,3 +129,24 @@ def test_http_refuses_public_bind_without_opt_in():
         timeout=30,
     )
     assert proc.returncode != 0 and "no authentication" in proc.stderr
+
+
+def test_other_loopback_addresses_need_opt_in():
+    from life_admin_mcp.server import _is_loopback
+
+    assert _is_loopback("127.0.0.1") and _is_loopback("localhost") and _is_loopback("::1")
+    assert not _is_loopback("127.0.0.2")
+
+
+def test_allow_remote_relaxes_v1_host_check(monkeypatch):
+    from life_admin_mcp import server
+
+    settings = getattr(server.mcp, "settings", None)
+    if settings is None or not hasattr(settings, "transport_security"):
+        pytest.skip("only SDK v1 (>=1.13) keeps transport security in settings")
+    monkeypatch.setattr(server.mcp, "run", lambda *a, **k: None)
+    monkeypatch.setattr(server, "set_store", lambda s: None)
+    monkeypatch.setattr(server, "Store", lambda p: None)
+    server.main(["--transport", "http", "--host", "0.0.0.0", "--allow-remote"])  # noqa: S104
+    ts = settings.transport_security
+    assert ts is None or not ts.enable_dns_rebinding_protection

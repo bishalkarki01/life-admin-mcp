@@ -153,7 +153,7 @@ No, and that's on purpose: nothing leaves your machine. Export a CSV from your b
 Most CSV exports work. It detects the date, description and amount (or debit/credit) columns, the delimiter, the date format (US, EU or ISO), and whether spending is shown as positive or negative. It also skips header lines some banks put above the data. If yours doesn't work, [open an issue](https://github.com/bishalkarki01/life-admin-mcp/issues/new/choose) with the header row and one made-up line.
 
 **Can I try it without my own data?**
-Yes. Ask your assistant to scan [`examples/sample-statement.csv`](examples/sample-statement.csv), a realistic made-up year of card transactions.
+Yes. Download [`sample-statement.csv`](https://raw.githubusercontent.com/bishalkarki01/life-admin-mcp/main/examples/sample-statement.csv), a realistic made-up year of card transactions, then ask your assistant to scan it using the full path where you saved it.
 
 **Will it remind me on its own?**
 Your assistant reminds you when you ask. For phone alerts, say "put it all on my calendar" and import the `.ics` file into your calendar app.
@@ -162,7 +162,7 @@ Your assistant reminds you when you ask. For phone alerts, say "put it all on my
 Yes. Totals are kept separately for each currency and never converted.
 
 **Where's my data, and how do I back it up?**
-It's one file at `~/.life-admin/life_admin.db`. To back it up, ask "back up my data", or copy that file.
+It's one file at `~/.life-admin/life_admin.db` (on macOS and Linux, only your user account can read it). To back it up, ask "back up my data", or copy that file.
 
 ## Roadmap
 
@@ -177,7 +177,7 @@ Have an idea? [Open an issue](https://github.com/bishalkarki01/life-admin-mcp/is
 
 ## Contributing
 
-PRs are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). The setup takes about a minute:
+PRs are welcome. See [CONTRIBUTING.md](https://github.com/bishalkarki01/life-admin-mcp/blob/main/CONTRIBUTING.md). The setup takes about a minute:
 
 ```bash
 pip install -e ".[dev]" && pytest
@@ -185,6 +185,6 @@ pip install -e ".[dev]" && pytest
 
 ## License
 
-[MIT](LICENSE). If this saves you money, a ⭐ helps other people find it.
+[MIT](https://github.com/bishalkarki01/life-admin-mcp/blob/main/LICENSE). If this saves you money, a ⭐ helps other people find it.
 
 <!-- mcp-name: io.github.bishalkarki01/life-admin-mcp -->

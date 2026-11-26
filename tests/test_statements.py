@@ -113,3 +113,108 @@ def test_bad_statements_explain_the_problem(bad, msg):
 def test_irregular_shopping_is_not_recurring():
     rows = ["Date,Description,Amount"] + [f"2026-01-{d:02d},SAFEWAY,-{10 + d}.00" for d in (2, 9, 11, 23, 30)]
     assert scan("\n".join(rows), date(2026, 2, 1)).recurring == []
+
+
+# --------------------------------------------------------------------------- regressions
+def _monthly(rows: list[str], header: str = "Date,Description,Amount") -> str:
+    return "\n".join([header, *rows]) + "\n"
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("MCAFEE.COM 888-847-8766", "Mcafee"),
+        ("MCDONALDS 1234", "Mcdonalds"),
+        ("POSTMATES", "Postmates"),
+        ("WEBEX", "Webex"),
+        ("CARDINAL HEALTH", "Cardinal Health"),
+        ("ACHIEVE FITNESS", "Achieve Fitness"),
+        ("POS MCAFEE.COM", "Mcafee"),
+        ("TST* JOES PIZZA", "Joes Pizza"),
+    ],
+)
+def test_noise_prefixes_only_strip_whole_words(raw, expected):
+    assert normalise_merchant(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "text,cents",
+    [
+        ("$-12.00", -1200),
+        ("USD -12.00", -1200),
+        ("€-12,00", -1200),
+        ("−12.00", -1200),
+        ("12.00-", -1200),
+        ("(12.00)", -1200),
+        ("-$12.00", -1200),
+        ("$12.00", 1200),
+    ],
+)
+def test_amount_sign_anywhere(text, cents):
+    from life_admin_mcp.statements import _parse_amount
+
+    assert _parse_amount(text) == cents
+
+
+def test_sign_after_currency_symbol_keeps_income_out():
+    rows = []
+    for m in range(1, 7):
+        rows += [f"2026-{m:02d}-03,NETFLIX.COM,$-15.49", f"2026-{m:02d}-15,ACME PAYROLL,$3000.00"]
+    r = scan(_monthly(rows), TODAY)
+    assert [x.merchant for x in r.recurring] == ["Netflix"]
+
+
+def test_value_date_column_is_not_the_amount():
+    rows = [f"2026-{m:02d}-05;2026-{m:02d}-06;NETFLIX.COM;15,49;" for m in range(1, 7)]
+    rows.append("2026-06-20;2026-06-20;SALARY;;3000,00")
+    text = _monthly(rows, "Booking Date;Value Date;Description;Debit;Credit")
+    txns, meta = parse_statement(text)
+    assert meta["skipped"] == 0
+    assert {t.amount_cents for t in txns} == {1549}
+    [r] = scan(text, TODAY).recurring
+    assert (r.merchant, r.amount) == ("Netflix", 15.49)
+
+
+def test_debit_amount_and_credit_amount_columns():
+    rows = [f"2026-{m:02d}-05,NETFLIX.COM,15.49," for m in range(1, 7)] + ["2026-06-20,SALARY,,3000.00"]
+    text = _monthly(rows, "Date,Description,Debit Amount,Credit Amount")
+    txns, meta = parse_statement(text)
+    assert meta["skipped"] == 0 and len(txns) == 6
+
+
+def test_same_merchant_two_subscriptions_same_day():
+    rows = []
+    for m in range(1, 7):
+        rows += [f"2026-{m:02d}-01,APPLE.COM/BILL,-2.99", f"2026-{m:02d}-01,APPLE.COM/BILL,-10.99"]
+    found = sorted(r.amount for r in scan(_monthly(rows), TODAY).recurring)
+    assert found == [2.99, 10.99]
+
+
+def test_month_end_charge_keeps_month_end_anchor():
+    rows = ["2026-01-31,GYM,-40.00", "2026-02-28,GYM,-40.00"]
+    [r] = scan(_monthly(rows), date(2026, 3, 1)).recurring
+    assert r.next_expected == "2026-03-31"
+
+
+def test_header_only_statement_says_no_transactions():
+    with pytest.raises(ValueError, match="no transactions"):
+        parse_statement("Date,Description,Amount\n")
+
+
+def test_one_day_late_posting_does_not_shift_the_anchor():
+    rows = [
+        f"{d},PLANET FITNESS,-24.99" for d in ("2025-10-28", "2025-11-28", "2025-12-29", "2026-01-28", "2026-02-28")
+    ]
+    [r] = scan(_monthly(rows), date(2026, 3, 2)).recurring
+    assert r.next_expected == "2026-03-28"
+
+
+def test_same_day_merchant_price_change_is_one_subscription():
+    rows = []
+    for m in range(1, 11):
+        rows += [
+            f"2026-{m:02d}-15,APPLE.COM/BILL,-10.99",
+            f"2026-{m:02d}-15,APPLE.COM/BILL,-{2.99 if m <= 5 else 3.99}",
+        ]
+    found = sorted((r.amount, r.price_change, r.ended) for r in scan(_monthly(rows), TODAY).recurring)
+    assert found == [(3.99, (2.99, 3.99), False), (10.99, None, False)]

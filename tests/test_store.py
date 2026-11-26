@@ -290,3 +290,62 @@ def test_scan_statement_compares_with_tracked_items(store, clock):
     assert [r.merchant for r in res["ended"]] == ["Hellofresh"]
     assert "Planet Fitness" in {r.merchant for r in res["new"]}
     assert len(store.list_items()) == 2  # scanning never stores anything
+
+
+def test_spending_summary_handles_first_price_of_zero(tmp_path, clock):
+    from life_admin_mcp import server
+
+    s = Store(tmp_path / "z.db", today=clock)
+    item = add_netflix(s, amount=0)
+    s.update(item.id, amount=9.99)
+    server.set_store(s)
+    assert "0.00 → 9.99" in server.spending_summary()
+
+
+def test_import_reports_non_string_currency(store):
+    payload = {
+        "format": "life-admin-mcp",
+        "items": [
+            {"name": "A", "kind": "subscription", "due_date": "2026-02-01", "currency": 5},
+            {"name": "B", "kind": "subscription", "due_date": "2026-02-01"},
+        ],
+    }
+    added, errors = store.import_json(json.dumps(payload))
+    assert added == 1 and "currency" in errors[0]
+
+
+def test_custom_db_dir_permissions_untouched(tmp_path, clock):
+    import os
+    import stat
+    import sys
+
+    d = tmp_path / "shared"
+    d.mkdir()
+    d.chmod(0o755)
+    Store(d / "x.db", today=clock)
+    if sys.platform != "win32":
+        assert stat.S_IMODE(os.stat(d).st_mode) == 0o755
+        assert stat.S_IMODE(os.stat(d / "x.db").st_mode) == 0o600
+
+
+def test_scan_does_not_match_different_products_of_one_vendor(store, clock):
+    clock.d = date(2026, 7, 1)
+    store.add(name="Apple Music", kind="subscription", due_date="2026-07-01", amount=10.99, cycle="monthly")
+    store.add(name="Apple iCloud", kind="subscription", due_date="2026-07-01", amount=2.99, cycle="monthly")
+    rows = ["Date,Description,Amount"]
+    for m in range(1, 7):
+        rows += [f"2026-{m:02d}-01,APPLE.COM/BILL,-2.99", f"2026-{m:02d}-01,APPLE.COM/BILL,-10.99"]
+    res = store.scan_statement("\n".join(rows))
+    assert sorted(i.name for _, i in res["known"]) == ["Apple Music", "Apple iCloud"]
+    assert res["changed"] == []
+
+
+def test_scan_matches_location_suffixed_descriptor(store, clock):
+    clock.d = date(2026, 1, 31)
+    store.add(name="Spotify Premium", kind="subscription", due_date="2026-02-05", amount=11.99, cycle="monthly")
+    rows = ["Date,Description,Amount"] + [
+        f"{y}-{m:02d}-05,SPOTIFY STOCKHOLM SE,-11.99"
+        for y, m in [(2025, 8), (2025, 9), (2025, 10), (2025, 11), (2025, 12), (2026, 1)]
+    ]
+    res = store.scan_statement("\n".join(rows))
+    assert [i.name for _, i in res["known"]] == ["Spotify Premium"] and res["new"] == []
